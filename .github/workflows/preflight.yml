@@ -1,0 +1,44 @@
+name: Dependency preflight (hosted runner)
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: anza-xyz/wallet-adapter
+            commit: 3663416165b9a1af734c451e588b40cacd7091c1
+            path: target
+          - target: solana-foundation/anchor
+            commit: 53cd88fa179bad874904a37b65150a9a3840bc13
+            path: target/ts
+          - target: drift-labs/protocol-v2
+            commit: 13e8e9b8d614f3b62e3a65a8c372c819e6529aeb
+            path: target/sdk
+    name: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          repository: ${{ matrix.target }}
+          ref: ${{ matrix.commit }}
+          path: target
+          persist-credentials: false
+      # Never install or run anything from the target: the Action only reads lockfiles and manifests.
+      - id: preflight
+        uses: lemind/dependency-preflight@0dc486991c9c3456b0a9c39acbae92122671833a # PR #2 head, 25 Nov
+        continue-on-error: true # blocked targets fail this step by design; the verdict is checked below
+        with:
+          path: ${{ matrix.path }}
+      - name: Require a verdict
+        env:
+          VERDICT: ${{ steps.preflight.outputs.verdict }}
+          COVERAGE: ${{ steps.preflight.outputs.coverage }}
+        run: |
+          echo "verdict=$VERDICT coverage=$COVERAGE"
+          test -n "$VERDICT" && test -n "$COVERAGE"
